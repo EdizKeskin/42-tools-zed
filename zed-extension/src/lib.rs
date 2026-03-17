@@ -84,9 +84,18 @@ impl FortyTwoToolsExtension {
 
     fn language_server_command_from_settings(
         language_server_id: &LanguageServerId,
+        worktree: &Worktree,
         settings: &LspSettings,
     ) -> Result<zed::Command> {
         if let Some(path) = Self::configured_binary_path(settings) {
+            return Ok(zed::Command {
+                command: path,
+                args: Self::server_args(settings),
+                env: Self::server_env(settings),
+            });
+        }
+
+        if let Some(path) = worktree.which(SERVER_BINARY_NAME) {
             return Ok(zed::Command {
                 command: path,
                 args: Self::server_args(settings),
@@ -266,7 +275,7 @@ impl zed::Extension for FortyTwoToolsExtension {
         }
 
         let settings = Self::load_lsp_settings(worktree)?;
-        Self::language_server_command_from_settings(language_server_id, &settings)
+        Self::language_server_command_from_settings(language_server_id, worktree, &settings)
     }
 
     fn language_server_initialization_options(
@@ -311,8 +320,8 @@ mod tests {
     #[test]
     fn versioned_paths_match_release_tag() {
         let paths = FortyTwoToolsExtension::versioned_install_paths();
-        assert_eq!(paths.version_dir, "v0.1.0");
-        assert_eq!(paths.server_path, "v0.1.0/forty-two-tools-lsp");
+        assert_eq!(paths.version_dir, "v0.1.2");
+        assert_eq!(paths.server_path, "v0.1.2/forty-two-tools-lsp");
     }
 
     #[test]
