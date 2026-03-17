@@ -9,7 +9,7 @@ use zed_extension_api::{
 
 const LANGUAGE_SERVER_ID: &str = "42-tools-lsp";
 const SERVER_BINARY_NAME: &str = "forty-two-tools-lsp";
-const GITHUB_REPOSITORY: &str = "edizk/42-tools-zed";
+const GITHUB_REPOSITORY: &str = "EdizKeskin/42-tools-zed";
 const SETTINGS_ENV_VAR: &str = "FORTY_TWO_TOOLS_SETTINGS_JSON";
 const EXTENSION_VERSION: &str = env!("CARGO_PKG_VERSION");
 const WINDOWS_UNSUPPORTED_MESSAGE: &str = "42 Tools currently supports macOS and Linux only.";
