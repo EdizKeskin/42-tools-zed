@@ -219,14 +219,14 @@ dependencies = [
 
 [[package]]
 name = "forty-two-tools-extension"
-version = "0.1.2"
+version = "0.1.4"
 dependencies = [
  "zed_extension_api",
 ]
 
 [[package]]
 name = "forty-two-tools-lsp"
-version = "0.1.2"
+version = "0.1.4"
 dependencies = [
  "chrono",
  "regex",

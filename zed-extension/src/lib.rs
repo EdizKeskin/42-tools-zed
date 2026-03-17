@@ -320,8 +320,8 @@ mod tests {
     #[test]
     fn versioned_paths_match_release_tag() {
         let paths = FortyTwoToolsExtension::versioned_install_paths();
-        assert_eq!(paths.version_dir, "v0.1.2");
-        assert_eq!(paths.server_path, "v0.1.2/forty-two-tools-lsp");
+        assert_eq!(paths.version_dir, "v0.1.4");
+        assert_eq!(paths.server_path, "v0.1.4/forty-two-tools-lsp");
     }
 
     #[test]

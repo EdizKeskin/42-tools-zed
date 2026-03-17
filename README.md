@@ -88,7 +88,7 @@ If the formatter is missing, header actions still work and the server logs a war
 
 ## Release assets
 
-Each GitHub release tag must match the extension version exactly, for example `v0.1.2`.
+Each GitHub release tag must match the extension version exactly, for example `v0.1.4`.
 
 Expected asset names:
 
@@ -113,8 +113,8 @@ The release workflow:
 Create a release by pushing a semver tag:
 
 ```bash
-git tag v0.1.2
-git push origin v0.1.2
+git tag v0.1.4
+git push origin v0.1.4
 ```
 
 ## Zed Store submission
@@ -122,6 +122,6 @@ git push origin v0.1.2
 After publishing the GitHub release:
 
 1. Add this repository as `extensions/42-tools` in `zed-industries/extensions`.
-2. Update `extensions.toml` with `version = "0.1.2"`.
+2. Update `extensions.toml` with `version = "0.1.4"`.
 3. Run `pnpm sort-extensions`.
 4. Open the store PR.
