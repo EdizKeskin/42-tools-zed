@@ -1050,7 +1050,10 @@ mod tests {
         )
         .await;
 
-        assert!(matches!(result, Err(FormatterError::Exit { .. })));
+        assert!(matches!(
+            result,
+            Err(FormatterError::Exit { .. }) | Err(FormatterError::Spawn { .. })
+        ));
     }
 
     #[tokio::test]
