@@ -23,7 +23,8 @@ use tower_lsp::{
         DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams,
         DocumentFormattingParams, ExecuteCommandOptions, ExecuteCommandParams, InitializeParams,
         InitializeResult, MessageType, OneOf, Position, Range, ServerCapabilities, ServerInfo,
-        TextDocumentSyncCapability, TextDocumentSyncKind, TextEdit, Url, WorkspaceEdit,
+        TextDocumentSyncCapability, TextDocumentSyncKind, TextDocumentSyncOptions,
+        TextDocumentSyncSaveOptions, TextEdit, Url, WillSaveTextDocumentParams, WorkspaceEdit,
     },
     Client, LanguageServer, LspService, Server,
 };
@@ -205,6 +206,29 @@ impl Backend {
         build_header_workspace_edit(uri, &source, &runtime_settings.header)
     }
 
+    async fn header_save_edits(&self, uri: &Url) -> Result<Option<Vec<TextEdit>>> {
+        if !is_supported_c_document(uri) {
+            return Ok(None);
+        }
+
+        let source = match self.read_document_text(uri).await {
+            Ok(source) => source,
+            Err(error) => {
+                self.log_warning(error).await;
+                return Ok(None);
+            }
+        };
+
+        let runtime_settings = self.read_runtime_settings().await;
+        match build_header_text_edit(uri, &source, &runtime_settings.header) {
+            Ok(edit) => Ok(Some(vec![edit])),
+            Err(error) => {
+                self.log_warning(error).await;
+                Ok(None)
+            }
+        }
+    }
+
     async fn format_document_edits(
         &self,
         params: DocumentFormattingParams,
@@ -346,8 +370,14 @@ impl LanguageServer for Backend {
                 version: Some(env!("CARGO_PKG_VERSION").to_string()),
             }),
             capabilities: ServerCapabilities {
-                text_document_sync: Some(TextDocumentSyncCapability::Kind(
-                    TextDocumentSyncKind::FULL,
+                text_document_sync: Some(TextDocumentSyncCapability::Options(
+                    TextDocumentSyncOptions {
+                        open_close: Some(true),
+                        change: Some(TextDocumentSyncKind::FULL),
+                        will_save: Some(true),
+                        will_save_wait_until: Some(true),
+                        save: Some(TextDocumentSyncSaveOptions::Supported(true)),
+                    },
                 )),
                 document_formatting_provider: Some(OneOf::Left(true)),
                 code_action_provider: Some(CodeActionProviderCapability::Options(
@@ -391,6 +421,13 @@ impl LanguageServer for Backend {
                 .await
                 .insert(params.text_document.uri, change.text);
         }
+    }
+
+    async fn will_save_wait_until(
+        &self,
+        params: WillSaveTextDocumentParams,
+    ) -> Result<Option<Vec<TextEdit>>> {
+        self.header_save_edits(&params.text_document.uri).await
     }
 
     async fn did_change_configuration(&self, params: DidChangeConfigurationParams) {
