@@ -1,0 +1,11 @@
+id = "42-tools"
+name = "42 Tools"
+version = "0.1.0"
+schema_version = 1
+authors = ["Ediz Keskin <edizkeskin@gmail.com>"]
+description = "42 School header management and Norm v3 C formatting for Zed."
+repository = "https://github.com/edizk/42-tools-zed"
+
+[language_servers."42-tools-lsp"]
+name = "42 Tools LSP"
+languages = ["C"]

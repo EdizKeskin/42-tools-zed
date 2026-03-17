@@ -1,0 +1,128 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  FORMATTER_MACOS_AARCH64_URL: ${{ vars.FORMATTER_MACOS_AARCH64_URL }}
+  FORMATTER_MACOS_X86_64_URL: ${{ vars.FORMATTER_MACOS_X86_64_URL }}
+  FORMATTER_LINUX_AARCH64_URL: ${{ vars.FORMATTER_LINUX_AARCH64_URL }}
+  FORMATTER_LINUX_X86_64_URL: ${{ vars.FORMATTER_LINUX_X86_64_URL }}
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip2
+
+      - name: Run LSP tests
+        run: cargo test -p forty-two-tools-lsp
+
+      - name: Build extension wasm
+        run: cargo build --target wasm32-wasip2 --release
+
+      - name: Upload extension wasm
+        uses: actions/upload-artifact@v4
+        with:
+          name: extension-wasm
+          path: target/wasm32-wasip2/release/forty_two_tools_extension.wasm
+
+  build-release-assets:
+    needs: verify
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-14
+            asset_name: 42-tools-mac-aarch64.zip
+            formatter_var: FORMATTER_MACOS_AARCH64_URL
+          - runner: macos-13
+            asset_name: 42-tools-mac-x86_64.zip
+            formatter_var: FORMATTER_MACOS_X86_64_URL
+          - runner: ubuntu-24.04-arm
+            asset_name: 42-tools-linux-aarch64.zip
+            formatter_var: FORMATTER_LINUX_AARCH64_URL
+          - runner: ubuntu-latest
+            asset_name: 42-tools-linux-x86_64.zip
+            formatter_var: FORMATTER_LINUX_X86_64_URL
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Build LSP binary
+        run: cargo build -p forty-two-tools-lsp --release
+
+      - name: Resolve formatter URL
+        id: formatter-url
+        shell: bash
+        run: |
+          case "${{ matrix.formatter_var }}" in
+            FORMATTER_MACOS_AARCH64_URL) formatter_url="$FORMATTER_MACOS_AARCH64_URL" ;;
+            FORMATTER_MACOS_X86_64_URL) formatter_url="$FORMATTER_MACOS_X86_64_URL" ;;
+            FORMATTER_LINUX_AARCH64_URL) formatter_url="$FORMATTER_LINUX_AARCH64_URL" ;;
+            FORMATTER_LINUX_X86_64_URL) formatter_url="$FORMATTER_LINUX_X86_64_URL" ;;
+            *) echo "Unknown formatter URL key: ${{ matrix.formatter_var }}" >&2; exit 1 ;;
+          esac
+
+          if [ -z "$formatter_url" ]; then
+            echo "Repository variable for ${{ matrix.formatter_var }} is empty." >&2
+            exit 1
+          fi
+
+          echo "formatter_url=$formatter_url" >> "$GITHUB_OUTPUT"
+
+      - name: Download formatter binary
+        shell: bash
+        run: |
+          curl -fsSL "${{ steps.formatter-url.outputs.formatter_url }}" -o c_formatter_42
+          chmod +x c_formatter_42
+
+      - name: Package release asset
+        shell: bash
+        run: |
+          mkdir bundle
+          cp target/release/forty-two-tools-lsp bundle/forty-two-tools-lsp
+          cp c_formatter_42 bundle/c_formatter_42
+          chmod +x bundle/forty-two-tools-lsp bundle/c_formatter_42
+          cd bundle
+          zip -r "../${{ matrix.asset_name }}" .
+
+      - name: Upload packaged asset
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset_name }}
+          path: ${{ matrix.asset_name }}
+
+  publish-release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs:
+      - verify
+      - build-release-assets
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts
+
+      - name: Publish GitHub release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release-artifacts/extension-wasm/forty_two_tools_extension.wasm
+            release-artifacts/42-tools-mac-aarch64.zip/42-tools-mac-aarch64.zip
+            release-artifacts/42-tools-mac-x86_64.zip/42-tools-mac-x86_64.zip
+            release-artifacts/42-tools-linux-aarch64.zip/42-tools-linux-aarch64.zip
+            release-artifacts/42-tools-linux-x86_64.zip/42-tools-linux-x86_64.zip
