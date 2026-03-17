@@ -9,10 +9,8 @@ use zed_extension_api::{
 
 const LANGUAGE_SERVER_ID: &str = "42-tools-lsp";
 const SERVER_BINARY_NAME: &str = "forty-two-tools-lsp";
-const FORMATTER_BINARY_NAME: &str = "c_formatter_42";
 const GITHUB_REPOSITORY: &str = "edizk/42-tools-zed";
 const SETTINGS_ENV_VAR: &str = "FORTY_TWO_TOOLS_SETTINGS_JSON";
-const BUNDLED_FORMATTER_ENV_VAR: &str = "FORTY_TWO_TOOLS_FORMATTER_PATH";
 const EXTENSION_VERSION: &str = env!("CARGO_PKG_VERSION");
 const WINDOWS_UNSUPPORTED_MESSAGE: &str = "42 Tools currently supports macOS and Linux only.";
 
@@ -22,7 +20,6 @@ struct FortyTwoToolsExtension;
 struct InstalledBinaries {
     version_dir: String,
     server_path: String,
-    formatter_path: String,
 }
 
 impl FortyTwoToolsExtension {
@@ -38,7 +35,6 @@ impl FortyTwoToolsExtension {
         let version_dir = Self::release_tag();
         InstalledBinaries {
             server_path: format!("{version_dir}/{SERVER_BINARY_NAME}"),
-            formatter_path: format!("{version_dir}/{FORMATTER_BINARY_NAME}"),
             version_dir,
         }
     }
@@ -59,10 +55,7 @@ impl FortyTwoToolsExtension {
             .unwrap_or_default()
     }
 
-    fn server_env(
-        settings: &LspSettings,
-        bundled_formatter_path: Option<&str>,
-    ) -> Vec<(String, String)> {
+    fn server_env(settings: &LspSettings) -> Vec<(String, String)> {
         let mut env = settings
             .binary
             .as_ref()
@@ -77,10 +70,6 @@ impl FortyTwoToolsExtension {
 
         if let Some(lsp_settings) = settings.settings.as_ref() {
             Self::push_env_if_missing(&mut env, SETTINGS_ENV_VAR, lsp_settings.to_string());
-        }
-
-        if let Some(path) = bundled_formatter_path {
-            Self::push_env_if_missing(&mut env, BUNDLED_FORMATTER_ENV_VAR, path.to_string());
         }
 
         env.sort_by(|left, right| left.0.cmp(&right.0));
@@ -101,7 +90,7 @@ impl FortyTwoToolsExtension {
             return Ok(zed::Command {
                 command: path,
                 args: Self::server_args(settings),
-                env: Self::server_env(settings, None),
+                env: Self::server_env(settings),
             });
         }
 
@@ -109,7 +98,7 @@ impl FortyTwoToolsExtension {
         Ok(zed::Command {
             command: installed.server_path,
             args: Self::server_args(settings),
-            env: Self::server_env(settings, Some(&installed.formatter_path)),
+            env: Self::server_env(settings),
         })
     }
 
@@ -181,10 +170,6 @@ impl FortyTwoToolsExtension {
         make_file_executable(&installed.server_path).map_err(|error| {
             format!("failed to mark `{SERVER_BINARY_NAME}` as executable: {error}")
         })?;
-        make_file_executable(&installed.formatter_path).map_err(|error| {
-            format!("failed to mark `{FORMATTER_BINARY_NAME}` as executable: {error}")
-        })?;
-
         if Self::is_installed(installed) {
             Ok(())
         } else {
@@ -196,7 +181,7 @@ impl FortyTwoToolsExtension {
     }
 
     fn is_installed(installed: &InstalledBinaries) -> bool {
-        Path::new(&installed.server_path).exists() && Path::new(&installed.formatter_path).exists()
+        Path::new(&installed.server_path).exists()
     }
 
     fn cleanup_old_installs(current_version_dir: &str) -> Result<()> {
@@ -328,7 +313,6 @@ mod tests {
         let paths = FortyTwoToolsExtension::versioned_install_paths();
         assert_eq!(paths.version_dir, "v0.1.0");
         assert_eq!(paths.server_path, "v0.1.0/forty-two-tools-lsp");
-        assert_eq!(paths.formatter_path, "v0.1.0/c_formatter_42");
     }
 
     #[test]
@@ -339,14 +323,11 @@ mod tests {
             settings: Some(zed::serde_json::json!({ "header": { "login": "marvin" } })),
         };
 
-        let env = FortyTwoToolsExtension::server_env(&settings, Some("v0.1.0/c_formatter_42"));
+        let env = FortyTwoToolsExtension::server_env(&settings);
 
         assert!(env
             .iter()
             .any(|(key, value)| { key == SETTINGS_ENV_VAR && value.contains("\"marvin\"") }));
-        assert!(env.iter().any(|(key, value)| {
-            key == BUNDLED_FORMATTER_ENV_VAR && value == "v0.1.0/c_formatter_42"
-        }));
     }
 
     #[test]

@@ -35,7 +35,6 @@ const FORMATTER_BINARY: &str = "c_formatter_42";
 const DEFAULT_EMAIL_DOMAIN: &str = "student.42istanbul.com.tr";
 const TIMESTAMP_FORMAT: &str = "%Y/%m/%d %H:%M:%S";
 const SETTINGS_ENV_VAR: &str = "FORTY_TWO_TOOLS_SETTINGS_JSON";
-const BUNDLED_FORMATTER_ENV_VAR: &str = "FORTY_TWO_TOOLS_FORMATTER_PATH";
 
 const HEADER_LINE_COUNT: usize = 11;
 const HEADER_UPDATED_LINE_INDEX: usize = 8;
@@ -463,11 +462,6 @@ fn resolve_formatter_command(settings: &FormatterSettings) -> FormatterCommand {
         .as_deref()
         .and_then(trimmed_option)
         .map(ToString::to_string)
-        .or_else(|| {
-            env::var(BUNDLED_FORMATTER_ENV_VAR)
-                .ok()
-                .and_then(|value| trimmed_option(&value).map(ToString::to_string))
-        })
         .unwrap_or_else(|| FORMATTER_BINARY.to_string());
 
     FormatterCommand {
@@ -979,19 +973,6 @@ mod tests {
 
         assert_eq!(command.program, "/tmp/custom-formatter");
         assert_eq!(command.arguments, vec!["--flag".to_string()]);
-    }
-
-    #[test]
-    fn bundled_formatter_env_is_used_when_no_setting_path_exists() {
-        unsafe {
-            env::set_var(BUNDLED_FORMATTER_ENV_VAR, "/tmp/bundled-formatter");
-        }
-        let command = resolve_formatter_command(&FormatterSettings::default());
-        unsafe {
-            env::remove_var(BUNDLED_FORMATTER_ENV_VAR);
-        }
-
-        assert_eq!(command.program, "/tmp/bundled-formatter");
     }
 
     #[test]

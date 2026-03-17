@@ -4,7 +4,7 @@
 
 - 42 header insert/update actions for `.c` and `.h` files
 - formatting through `c_formatter_42`
-- bundled macOS and Linux language-server installs for one-click Zed Store setup
+- bundled macOS and Linux language-server installs for Zed Store setup
 
 ## Supported platforms
 
@@ -74,8 +74,17 @@ The extension reads the standard `lsp."42-tools-lsp"` block.
 Resolution order:
 
 - LSP binary: `binary.path` -> bundled versioned asset -> release download
-- formatter binary: `settings.formatter.path` -> bundled formatter path from the extension -> `c_formatter_42` on `PATH`
+- formatter binary: `settings.formatter.path` -> `c_formatter_42` on `PATH`
 - header identity: `settings.header.login` / `settings.header.email_domain` -> `USER` / `USERNAME` and `student.42istanbul.com.tr`
+
+## Formatter installation
+
+`c_formatter_42` is not bundled with the extension release. Users must install it separately and either:
+
+- make `c_formatter_42` available on `PATH`, or
+- set `lsp."42-tools-lsp".settings.formatter.path`
+
+If the formatter is missing, header actions still work and the server logs a warning when formatting is requested.
 
 ## Release assets
 
@@ -88,10 +97,9 @@ Expected asset names:
 - `42-tools-linux-aarch64.zip`
 - `42-tools-linux-x86_64.zip`
 
-Each zip must extract to exactly these files at its root:
+Each zip must extract to exactly this file at its root:
 
 - `forty-two-tools-lsp`
-- `c_formatter_42`
 
 ## GitHub Actions release flow
 
@@ -99,16 +107,8 @@ The release workflow:
 
 - validates tests and the WASM build
 - builds `forty-two-tools-lsp` on four target runners
-- downloads the matching `c_formatter_42` binary for each target
 - packages the expected zip assets
 - uploads the assets to the tagged GitHub release
-
-Set these repository variables before tagging a release:
-
-- `FORMATTER_MACOS_AARCH64_URL`
-- `FORMATTER_MACOS_X86_64_URL`
-- `FORMATTER_LINUX_AARCH64_URL`
-- `FORMATTER_LINUX_X86_64_URL`
 
 Create a release by pushing a semver tag:
 
