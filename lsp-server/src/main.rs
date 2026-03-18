@@ -34,6 +34,8 @@ const INSERT_HEADER_COMMAND: &str = "42tools.insertHeader";
 const HEADER_CODE_ACTION_KIND: &str = "source.42tools.header";
 const HEADER_ACTION_TITLE: &str = "42 Tools: Insert or Update Header";
 const FORMATTER_BINARY: &str = "c_formatter_42";
+const PYTHON_BINARY: &str = "python3";
+const PYTHON_FORMATTER_MODULE: &str = "c_formatter_42";
 const DEFAULT_EMAIL_DOMAIN: &str = "student.42istanbul.com.tr";
 const TIMESTAMP_FORMAT: &str = "%Y/%m/%d %H:%M:%S";
 const SETTINGS_ENV_VAR: &str = "FORTY_TWO_TOOLS_SETTINGS_JSON";
@@ -153,6 +155,15 @@ impl FormatterError {
     }
 }
 
+impl FormatterCommand {
+    fn python_module_formatter() -> Self {
+        Self {
+            program: PYTHON_BINARY.to_string(),
+            arguments: vec!["-m".to_string(), PYTHON_FORMATTER_MODULE.to_string()],
+        }
+    }
+}
+
 struct Backend {
     client: Client,
     documents: RwLock<HashMap<Url, String>>,
@@ -221,14 +232,7 @@ impl Backend {
         };
 
         let runtime_settings = self.read_runtime_settings().await;
-        let formatter_command = resolve_formatter_command(&runtime_settings.formatter);
-        let formatted = match run_formatter_command(
-            &formatter_command.program,
-            &formatter_command.arguments,
-            &source,
-        )
-        .await
-        {
+        let formatted = match run_formatter(&runtime_settings.formatter, &source).await {
             Ok(formatted) => formatted,
             Err(error) => {
                 self.log_warning(error.message()).await;
@@ -530,6 +534,42 @@ fn resolve_formatter_command(settings: &FormatterSettings) -> FormatterCommand {
         program,
         arguments: settings.arguments.clone(),
     }
+}
+
+async fn run_formatter(
+    settings: &FormatterSettings,
+    source: &str,
+) -> std::result::Result<String, FormatterError> {
+    if settings.path.as_deref().and_then(trimmed_option).is_some() {
+        let formatter_command = resolve_formatter_command(settings);
+        return run_formatter_command(
+            &formatter_command.program,
+            &formatter_command.arguments,
+            source,
+        )
+        .await;
+    }
+
+    let candidates = [
+        resolve_formatter_command(settings),
+        FormatterCommand::python_module_formatter(),
+    ];
+
+    let mut last_spawn_error = None;
+    for candidate in candidates {
+        match run_formatter_command(&candidate.program, &candidate.arguments, source).await {
+            Ok(output) => return Ok(output),
+            Err(error @ FormatterError::Spawn { .. }) => {
+                last_spawn_error = Some(error);
+            }
+            Err(error) => return Err(error),
+        }
+    }
+
+    Err(last_spawn_error.unwrap_or_else(|| FormatterError::Spawn {
+        program: FORMATTER_BINARY.to_string(),
+        error: "formatter executable could not be resolved".to_string(),
+    }))
 }
 
 fn trimmed_option(value: &str) -> Option<&str> {
