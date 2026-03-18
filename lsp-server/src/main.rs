@@ -1152,10 +1152,13 @@ mod tests {
         )
         .await;
 
-        assert!(matches!(
-            result,
-            Err(FormatterError::Exit { .. }) | Err(FormatterError::Spawn { .. })
-        ));
+        match result {
+            Err(FormatterError::Exit { .. })
+            | Err(FormatterError::Spawn { .. })
+            | Err(FormatterError::Stdin { .. }) => {}
+            Ok(output) => panic!("expected formatter failure, got successful output: {output}"),
+            Err(other) => panic!("expected a formatter failure, got {other:?}"),
+        }
     }
 
     #[tokio::test]
