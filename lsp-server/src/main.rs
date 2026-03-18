@@ -21,10 +21,11 @@ use tower_lsp::{
         CodeAction, CodeActionKind, CodeActionOrCommand, CodeActionParams,
         CodeActionProviderCapability, CodeActionResponse, DidChangeConfigurationParams,
         DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams,
-        DocumentFormattingParams, ExecuteCommandOptions, ExecuteCommandParams, InitializeParams,
-        InitializeResult, MessageType, OneOf, Position, Range, ServerCapabilities, ServerInfo,
-        TextDocumentSyncCapability, TextDocumentSyncKind, TextDocumentSyncOptions,
-        TextDocumentSyncSaveOptions, TextEdit, Url, WillSaveTextDocumentParams, WorkspaceEdit,
+        DidSaveTextDocumentParams, DocumentFormattingParams, ExecuteCommandOptions,
+        ExecuteCommandParams, InitializeParams, InitializeResult, MessageType, OneOf, Position,
+        Range, ServerCapabilities, ServerInfo, TextDocumentSyncCapability, TextDocumentSyncKind,
+        TextDocumentSyncOptions, TextDocumentSyncSaveOptions, TextEdit, Url,
+        WillSaveTextDocumentParams, WorkspaceEdit,
     },
     Client, LanguageServer, LspService, Server,
 };
@@ -206,39 +207,12 @@ impl Backend {
         build_header_workspace_edit(uri, &source, &runtime_settings.header)
     }
 
-    async fn header_save_edits(&self, uri: &Url) -> Result<Option<Vec<TextEdit>>> {
+    async fn save_pipeline_edits(&self, uri: &Url) -> Result<Option<Vec<TextEdit>>> {
         if !is_supported_c_document(uri) {
             return Ok(None);
         }
 
         let source = match self.read_document_text(uri).await {
-            Ok(source) => source,
-            Err(error) => {
-                self.log_warning(error).await;
-                return Ok(None);
-            }
-        };
-
-        let runtime_settings = self.read_runtime_settings().await;
-        match build_header_text_edit(uri, &source, &runtime_settings.header) {
-            Ok(edit) => Ok(Some(vec![edit])),
-            Err(error) => {
-                self.log_warning(error).await;
-                Ok(None)
-            }
-        }
-    }
-
-    async fn format_document_edits(
-        &self,
-        params: DocumentFormattingParams,
-    ) -> Result<Option<Vec<TextEdit>>> {
-        let uri = params.text_document.uri;
-        if !is_supported_c_document(&uri) {
-            return Ok(None);
-        }
-
-        let source = match self.read_document_text(&uri).await {
             Ok(source) => source,
             Err(error) => {
                 self.log_warning(error).await;
@@ -265,6 +239,9 @@ impl Backend {
         let Some(file_name) = file_name_from_uri(&uri) else {
             self.log_warning(format!("could not resolve a file name from `{uri}`"))
                 .await;
+            if formatted == source {
+                return Ok(None);
+            }
             return Ok(Some(vec![full_document_edit(&source, formatted)]));
         };
 
@@ -279,7 +256,18 @@ impl Backend {
                 }
             };
 
-        Ok(Some(vec![full_document_edit(&source, output)]))
+        if output == source {
+            Ok(None)
+        } else {
+            Ok(Some(vec![full_document_edit(&source, output)]))
+        }
+    }
+
+    async fn format_document_edits(
+        &self,
+        params: DocumentFormattingParams,
+    ) -> Result<Option<Vec<TextEdit>>> {
+        self.save_pipeline_edits(&params.text_document.uri).await
     }
 
     async fn header_code_actions(
@@ -359,6 +347,28 @@ impl Backend {
 
         Ok(None)
     }
+
+    async fn apply_workspace_edit(&self, uri: &Url, edits: Vec<TextEdit>, context: &str) {
+        let workspace_edit = WorkspaceEdit {
+            changes: Some(HashMap::from([(uri.clone(), edits)])),
+            ..Default::default()
+        };
+
+        match self.client.apply_edit(workspace_edit).await {
+            Ok(response) if response.applied => {}
+            Ok(response) => {
+                let reason = response
+                    .failure_reason
+                    .unwrap_or_else(|| "the client rejected the edit".to_string());
+                self.log_warning(format!("failed to apply {context}: {reason}"))
+                    .await;
+            }
+            Err(error) => {
+                self.log_warning(format!("failed to send {context} to the client: {error}"))
+                    .await;
+            }
+        }
+    }
 }
 
 #[tower_lsp::async_trait]
@@ -427,7 +437,22 @@ impl LanguageServer for Backend {
         &self,
         params: WillSaveTextDocumentParams,
     ) -> Result<Option<Vec<TextEdit>>> {
-        self.header_save_edits(&params.text_document.uri).await
+        self.save_pipeline_edits(&params.text_document.uri).await
+    }
+
+    async fn did_save(&self, params: DidSaveTextDocumentParams) {
+        match self.save_pipeline_edits(&params.text_document.uri).await {
+            Ok(Some(edits)) => {
+                self.apply_workspace_edit(
+                    &params.text_document.uri,
+                    edits,
+                    "42 Tools save pipeline edits",
+                )
+                .await;
+            }
+            Ok(None) => {}
+            Err(error) => self.log_warning(error.to_string()).await,
+        }
     }
 
     async fn did_change_configuration(&self, params: DidChangeConfigurationParams) {
