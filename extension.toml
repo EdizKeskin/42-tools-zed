@@ -1,6 +1,6 @@
 id = "42-tools"
 name = "42 Tools"
-version = "0.1.4"
+version = "0.1.5"
 schema_version = 1
 authors = ["Ediz Keskin <edizkeskin@gmail.com>"]
 description = "42 School header management and Norm v3 C formatting for Zed."
