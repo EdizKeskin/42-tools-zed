@@ -55,30 +55,44 @@ impl FortyTwoToolsExtension {
             .unwrap_or_default()
     }
 
-    fn server_env(settings: &LspSettings) -> Vec<(String, String)> {
-        let mut env = settings
+    fn server_env(settings: &LspSettings, worktree: &Worktree) -> Vec<(String, String)> {
+        Self::build_server_env(worktree.shell_env(), settings)
+    }
+
+    fn build_server_env(
+        mut env: Vec<(String, String)>,
+        settings: &LspSettings,
+    ) -> Vec<(String, String)> {
+        if let Some(variables) = settings
             .binary
             .as_ref()
             .and_then(|binary| binary.env.as_ref())
-            .map(|variables| {
-                variables
-                    .iter()
-                    .map(|(key, value)| (key.clone(), value.clone()))
-                    .collect::<Vec<_>>()
-            })
-            .unwrap_or_default();
+        {
+            for (key, value) in variables {
+                Self::upsert_env(&mut env, key.clone(), value.clone());
+            }
+        }
 
         if let Some(lsp_settings) = settings.settings.as_ref() {
-            Self::push_env_if_missing(&mut env, SETTINGS_ENV_VAR, lsp_settings.to_string());
+            Self::upsert_env(
+                &mut env,
+                SETTINGS_ENV_VAR.to_string(),
+                lsp_settings.to_string(),
+            );
         }
 
         env.sort_by(|left, right| left.0.cmp(&right.0));
         env
     }
 
-    fn push_env_if_missing(env: &mut Vec<(String, String)>, key: &str, value: String) {
-        if !env.iter().any(|(existing_key, _)| existing_key == key) {
-            env.push((key.to_string(), value));
+    fn upsert_env(env: &mut Vec<(String, String)>, key: String, value: String) {
+        if let Some((_, existing_value)) = env
+            .iter_mut()
+            .find(|(existing_key, _)| existing_key.as_str() == key.as_str())
+        {
+            *existing_value = value;
+        } else {
+            env.push((key, value));
         }
     }
 
@@ -91,7 +105,7 @@ impl FortyTwoToolsExtension {
             return Ok(zed::Command {
                 command: path,
                 args: Self::server_args(settings),
-                env: Self::server_env(settings),
+                env: Self::server_env(settings, worktree),
             });
         }
 
@@ -99,7 +113,7 @@ impl FortyTwoToolsExtension {
             return Ok(zed::Command {
                 command: path,
                 args: Self::server_args(settings),
-                env: Self::server_env(settings),
+                env: Self::server_env(settings, worktree),
             });
         }
 
@@ -107,7 +121,7 @@ impl FortyTwoToolsExtension {
         Ok(zed::Command {
             command: installed.server_path,
             args: Self::server_args(settings),
-            env: Self::server_env(settings),
+            env: Self::server_env(settings, worktree),
         })
     }
 
@@ -332,11 +346,20 @@ mod tests {
             settings: Some(zed::serde_json::json!({ "header": { "login": "marvin" } })),
         };
 
-        let env = FortyTwoToolsExtension::server_env(&settings);
+        let env = FortyTwoToolsExtension::build_server_env(
+            vec![(
+                "PATH".to_string(),
+                "/home/edizk/.local/bin:/usr/bin".to_string(),
+            )],
+            &settings,
+        );
 
         assert!(env
             .iter()
             .any(|(key, value)| { key == SETTINGS_ENV_VAR && value.contains("\"marvin\"") }));
+        assert!(env
+            .iter()
+            .any(|(key, value)| key == "PATH" && value.contains("/home/edizk/.local/bin")));
     }
 
     #[test]

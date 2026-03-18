@@ -74,7 +74,7 @@ The extension reads the standard `lsp."42-tools-lsp"` block.
 Resolution order:
 
 - LSP binary: `binary.path` -> bundled versioned asset -> release download
-- formatter binary: `settings.formatter.path` -> `c_formatter_42` on `PATH`
+- formatter binary: `settings.formatter.path` -> `c_formatter_42` on inherited shell `PATH` -> `python3 -m c_formatter_42`
 - header identity: `settings.header.login` / `settings.header.email_domain` -> `USER` / `USERNAME` and `student.42istanbul.com.tr`
 
 ## Formatter installation
